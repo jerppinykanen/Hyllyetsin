@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b1220">
+<title>Vastine-etsin</title>
+<style>
+  :root{--green:#22c55e;--bg:#0b1220;--panel:rgba(11,18,32,.88);--txt:#f1f5f9;--muted:#94a3b8;--blue:#3b82f6;--amber:#f59e0b}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:#000;color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  #overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+  #top{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 10px) 14px 12px;background:var(--panel);backdrop-filter:blur(6px);transition:background .2s;z-index:5}
+  #top.found{background:rgba(22,163,74,.95)}
+  #top.arming{background:rgba(180,83,9,.92)}
+  #top.miss{background:rgba(185,28,28,.92)}
+  #stepLbl{font-size:13px;color:#cbd5e1;letter-spacing:.04em;text-transform:uppercase}
+  #mainMsg{font-size:22px;font-weight:700;margin-top:2px;line-height:1.2;padding-right:40px}
+  #targetCode{font-family:ui-monospace,Consolas,monospace;font-size:26px;font-weight:800;margin-top:4px;word-break:break-all}
+  #gear{position:absolute;right:12px;top:calc(env(safe-area-inset-top) + 8px);background:none;border:0;color:#fff;font-size:26px;padding:6px}
+
+  #bottom{position:fixed;left:0;right:0;bottom:0;padding:12px 12px calc(env(safe-area-inset-bottom) + 12px);background:var(--panel);display:flex;gap:10px;z-index:5}
+  #bottom button{flex:1;min-height:56px;border:0;border-radius:14px;font-size:17px;font-weight:700;color:#fff;background:#334155}
+  #bottom button.primary{background:var(--green)}
+  #bottom button.blue{background:var(--blue)}
+  #bottom button.small{flex:0 0 64px;font-size:22px}
+  #bottom button.on{background:var(--amber)}
+  .hidden{display:none!important}
+
+  /* Kuvatila */
+  #photoStage{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center}
+  #photoCanvas{max-width:100%;max-height:100%;}
+  #photoHint{position:absolute;left:24px;right:24px;text-align:center;color:var(--muted);font-size:17px;line-height:1.5}
+  #busy{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;z-index:40}
+
+  #start{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;text-align:center;z-index:20;overflow:auto}
+  #start h1{margin:0 0 6px;font-size:28px}
+  #start p{color:var(--muted);max-width:420px;line-height:1.5;margin:6px 0}
+  #start ol{text-align:left;color:#cbd5e1;max-width:420px;line-height:1.6;padding-left:22px}
+  .bigBtn{margin-top:14px;min-height:60px;width:100%;max-width:340px;border:0;border-radius:16px;background:var(--green);color:#fff;font-size:19px;font-weight:800}
+  .bigBtn.alt{background:var(--blue)}
+  #err{color:#fca5a5;margin-top:16px;max-width:420px}
+  #modeInfo{font-size:13px;color:var(--muted);margin-top:14px;max-width:380px}
+
+  #engine{position:fixed;right:10px;bottom:calc(env(safe-area-inset-bottom) + 92px);font-size:11px;color:#cbd5e1;background:rgba(0,0,0,.45);padding:3px 8px;border-radius:8px;z-index:6}
+
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;z-index:30}
+  .sheet{width:100%;max-height:85vh;overflow:auto;background:#111827;border-radius:18px 18px 0 0;padding:18px 18px calc(env(safe-area-inset-bottom) + 18px)}
+  .sheet h2{margin:0 0 12px;font-size:20px}
+  .sheet h3{margin:18px 0 8px;font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1f2937;gap:12px}
+  .row label{font-size:16px}
+  select,input[type=text]{background:#1f2937;color:#fff;border:1px solid #374151;border-radius:10px;padding:10px;font-size:16px}
+  input[type=checkbox]{width:24px;height:24px}
+  .sheet .btns{display:flex;gap:10px;margin-top:16px}
+  .sheet .btns button{flex:1;min-height:50px;border:0;border-radius:12px;font-size:16px;font-weight:700;color:#fff;background:#334155}
+  .sheet .btns button.primary{background:var(--green)}
+  .pick{display:block;width:100%;margin:8px 0;min-height:50px;border:0;border-radius:12px;background:#1f2937;color:#fff;font-family:ui-monospace,Consolas,monospace;font-size:18px}
+  #log{list-style:none;margin:0;padding:0;font-family:ui-monospace,Consolas,monospace;font-size:14px}
+  #log li{padding:6px 0;border-bottom:1px solid #1f2937;display:flex;justify-content:space-between}
+  #log li span{color:var(--muted)}
+  #manualInput{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:20px}
+</style>
+</head>
+<body>
+
+<div id="stage" class="hidden">
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="overlay"></canvas>
+</div>
+
+<div id="photoStage" class="hidden">
+  <canvas id="photoCanvas"></canvas>
+  <div id="photoHint"></div>
+</div>
+
+<input id="fileInput" type="file" accept="image/*" capture="environment" class="hidden">
+
+<div id="top" class="hidden">
+  <div id="stepLbl">Vaihe 1 / 2</div>
+  <div id="mainMsg">Skannaa B-hyllyn laatikko</div>
+  <div id="targetCode"></div>
+  <button id="gear" aria-label="Asetukset">⚙️</button>
+</div>
+
+<div id="engine" class="hidden"></div>
+
+<div id="bottom" class="hidden">
+  <button id="btnPhoto" class="blue hidden">📷 Kuvaa</button>
+  <button id="btnManual">⌨️ Käsin</button>
+  <button id="btnNew" class="hidden">↺ Uusi</button>
+  <button id="btnDone" class="primary hidden">✓ Kuittaa</button>
+  <button id="btnTorch" class="small hidden" aria-label="Valo">🔦</button>
+</div>
+
+<div id="start">
+  <h1>📦 Vastine-etsin</h1>
+  <p>Löytää kameralla B-hyllystä otetun tuotteen vastineen A-hyllystä.</p>
+  <ol>
+    <li>Lue B-hyllyn laatikon koodi.</li>
+    <li>Kohdista kamera A-hyllyyn.</li>
+    <li>Oikea laatikko korostuu <b style="color:#22c55e">vihreällä</b>.</li>
+  </ol>
+  <button id="startLive" class="bigBtn">🎥 Live-kamera</button>
+  <button id="startPhoto" class="bigBtn alt">📷 Kuvatila</button>
+  <div id="modeInfo"></div>
+  <div id="err"></div>
+</div>
+
+<div id="manualModal" class="modal hidden">
+  <div class="sheet">
+    <h2>Syötä tuotekoodi</h2>
+    <input id="manualInput" type="text" autocomplete="off" autocapitalize="characters" placeholder="esim. MM100001">
+    <div class="btns">
+      <button id="manualCancel">Peruuta</button>
+      <button id="manualOk" class="primary">Etsi A-hyllystä</button>
+    </div>
+  </div>
+</div>
+
+<div id="pickModal" class="modal hidden">
+  <div class="sheet">
+    <h2>Kuvassa useita koodeja – valitse kerättävä</h2>
+    <div id="pickList"></div>
+    <div class="btns"><button id="pickCancel">Peruuta</button></div>
+  </div>
+</div>
+
+<div id="settingsModal" class="modal hidden">
+  <div class="sheet">
+    <h2>Asetukset</h2>
+    <div class="row">
+      <label for="setMatch">Vertailu</label>
+      <select id="setMatch">
+        <option value="exact">Koodi täsmälleen sama</option>
+        <option value="contains">Koodi sisältää toisen</option>
+      </select>
+    </div>
+    <div class="row"><label for="setSound">Äänimerkki</label><input id="setSound" type="checkbox"></div>
+    <div class="row"><label for="setVibrate">Värinä</label><input id="setVibrate" type="checkbox"></div>
+    <div class="row"><label for="setShowOthers">Näytä muut koodit harmaana</label><input id="setShowOthers" type="checkbox"></div>
+    <h3>Kuitatut (<span id="logCount">0</span>)</h3>
+    <ul id="log"></ul>
+    <div class="btns">
+      <button id="logClear">Tyhjennä loki</button>
+      <button id="settingsClose" class="primary">Sulje</button>
+    </div>
+  </div>
+</div>
+
+<div id="busy" class="hidden">🔍 Luetaan koodeja…</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const video = $("video"), overlay = $("overlay"), ctx = overlay.getContext("2d");
+  const top = $("top"), stepLbl = $("stepLbl"), mainMsg = $("mainMsg"), targetCodeEl = $("targetCode");
+  const pc = $("photoCanvas"), pctx = pc.getContext("2d");
+
+  const S = {
+    mode: null,            // live | photo
+    phase: "idle",         // scanB | searchA
+    target: null, armed: false, targetLastSeen: 0, found: false,
+    lastMatch: null, lastScanCandidate: null,
+    detector: null, engine: null, track: null, torch: false,
+    running: false, busy: false, lastRun: 0, audio: null
+  };
+
+  const DEFAULTS = { match: "exact", sound: true, vibrate: true, showOthers: true };
+  let settings = Object.assign({}, DEFAULTS);
+  let log = [];
+  try { Object.assign(settings, JSON.parse(localStorage.getItem("ve_settings") || "{}")); log = JSON.parse(localStorage.getItem("ve_log") || "[]"); } catch (e) {}
+  const saveSettings = () => { try { localStorage.setItem("ve_settings", JSON.stringify(settings)); } catch (e) {} };
+  const saveLog = () => { try { localStorage.setItem("ve_log", JSON.stringify(log)); } catch (e) {} };
+
+  const IN_APP = /VastineApp/.test(navigator.userAgent);
+  if (IN_APP) document.getElementById("startPhoto").classList.add("hidden");
+  const liveAllowed = !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  if (!liveAllowed) {
+    $("startLive").classList.add("hidden");
+    $("modeInfo").textContent = "Sivu on avattu ilman https-osoitetta, joten live-kamera ei ole käytössä. Kuvatila toimii: otat kuvan, ja sovellus merkitsee oikean laatikon kuvaan.";
+  } else {
+    $("modeInfo").textContent = "Live-kamera korostaa laatikon reaaliajassa. Kuvatila toimii aina, myös heikommilla puhelimilla.";
+  }
+
+  // ---------- Apurit ----------
+  const norm = s => String(s || "").trim().toUpperCase().replace(/\s+/g, "");
+  function isMatch(value, target) {
+    const a = norm(value), b = norm(target);
+    if (!a || !b) return false;
+    if (settings.match === "contains") return a.includes(b) || b.includes(a);
+    return a === b;
+  }
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error("Tunnistuskirjaston lataus epäonnistui – tarkista nettiyhteys."));
+      document.head.appendChild(s);
+    });
+  }
+  function beep(times = 2) {
+    if (!settings.sound || !S.audio) return;
+    try {
+      const ac = S.audio; if (ac.state === "suspended") ac.resume();
+      for (let i = 0; i < times; i++) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine"; o.frequency.value = 1350;
+        const t0 = ac.currentTime + i * 0.17;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+        o.connect(g).connect(ac.destination); o.start(t0); o.stop(t0 + 0.13);
+      }
+    } catch (e) {}
+  }
+  function vibrate(p) { if (settings.vibrate && navigator.vibrate) navigator.vibrate(p); }
+  const center = pts => ({ x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length });
+  const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  // ---------- Tunnistin ----------
+  async function initDetector() {
+    if ("BarcodeDetector" in window) {
+      try {
+        const supported = await BarcodeDetector.getSupportedFormats();
+        const wanted = ["qr_code", "data_matrix", "code_128", "code_39", "ean_13", "ean_8", "itf", "upc_a", "pdf417", "aztec"];
+        const formats = wanted.filter(f => supported.includes(f));
+        if (formats.length) {
+          S.detector = new BarcodeDetector({ formats });
+          S.engine = "native";
+          $("engine").textContent = "Tunnistus: natiivi (QR, DataMatrix, viivakoodit)";
+          return;
+        }
+      } catch (e) {}
+    }
+    await loadScript("https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js");
+    S.engine = "jsqr";
+    $("engine").textContent = "Tunnistus: jsQR (vain QR)";
+  }
+
+  const work = document.createElement("canvas");
+  const wctx = work.getContext("2d", { willReadFrequently: true });
+
+  function nativeToCodes(res) {
+    return res.map(r => {
+      let pts = r.cornerPoints && r.cornerPoints.length === 4 ? r.cornerPoints.map(p => ({ x: p.x, y: p.y })) : null;
+      if (!pts) { const b = r.boundingBox; pts = [{ x: b.x, y: b.y }, { x: b.x + b.width, y: b.y }, { x: b.x + b.width, y: b.y + b.height }, { x: b.x, y: b.y + b.height }]; }
+      return { value: r.rawValue, pts };
+    });
+  }
+
+  // jsQR löytää yhden koodin kerrallaan -> kuva pilkotaan limittäisiin osiin
+  function jsqrMulti(source, sw, sh, maxSide, grids) {
+    const k = Math.min(1, maxSide / Math.max(sw, sh));
+    const w = Math.round(sw * k), h = Math.round(sh * k);
+    work.width = w; work.height = h;
+    wctx.drawImage(source, 0, 0, w, h);
+    const regions = [];
+    for (const n of grids) {
+      if (n === 1) { regions.push([0, 0, w, h]); continue; }
+      const tw = Math.round(w / n * 1.5), th = Math.round(h / n * 1.5);
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        const x = Math.min(w - tw, Math.max(0, Math.round(i * w / n - (tw - w / n) / 2)));
+        const y = Math.min(h - th, Math.max(0, Math.round(j * h / n - (th - h / n) / 2)));
+        regions.push([x, y, tw, th]);
+      }
+    }
+    const out = [];
+    for (const [rx, ry, rw, rh] of regions) {
+      const img = wctx.getImageData(rx, ry, rw, rh);
+      const r = window.jsQR(img.data, rw, rh, { inversionAttempts: "dontInvert" });
+      if (!r || !r.data) continue;
+      const L = r.location;
+      const pts = [L.topLeftCorner, L.topRightCorner, L.bottomRightCorner, L.bottomLeftCorner].map(p => ({ x: (p.x + rx) / k, y: (p.y + ry) / k }));
+      const c = center(pts);
+      if (out.some(o => o.value === r.data && Math.hypot(center(o.pts).x - c.x, center(o.pts).y - c.y) < 40 / k)) continue;
+      out.push({ value: r.data, pts });
+    }
+    return out;
+  }
+
+  async function detectFrom(source, sw, sh, still) {
+    if (S.engine === "native") return nativeToCodes(await S.detector.detect(source));
+    return still ? jsqrMulti(source, sw, sh, 1600, [1, 2, 3, 4]) : jsqrMulti(source, sw, sh, 1100, [1, 2]);
+  }
+
+  // ---------- Yhteiset vaiheet ----------
+  function showUI() {
+    $("start").classList.add("hidden");
+    ["top", "bottom", "engine"].forEach(id => $(id).classList.remove("hidden"));
+  }
+
+  function setPhaseScanB() {
+    S.phase = "scanB"; S.target = null; S.found = false; S.lastMatch = null; S.lastScanCandidate = null;
+    top.className = "";
+    stepLbl.textContent = "Vaihe 1 / 2";
+    targetCodeEl.textContent = "";
+    mainMsg.textContent = S.mode === "photo" ? "Kuvaa B-hyllyn laatikon koodi" : "Skannaa B-hyllyn laatikko";
+    $("btnManual").classList.remove("hidden");
+    $("btnNew").classList.add("hidden");
+    $("btnDone").classList.add("hidden");
+    if (S.mode === "photo") {
+      $("btnPhoto").textContent = "📷 Kuvaa B";
+      pc.classList.add("hidden");
+      $("photoHint").classList.remove("hidden");
+      $("photoHint").textContent = "Paina \"Kuvaa B\" ja ota lähikuva laatikon koodista.";
+    }
+  }
+
+  function setTarget(value, fromCamera) {
+    S.phase = "searchA"; S.target = value; S.found = false; S.lastMatch = null;
+    S.armed = S.mode === "photo" ? true : !fromCamera;
+    S.targetLastSeen = performance.now();
+    vibrate(60); beep(1);
+    $("btnManual").classList.add("hidden");
+    $("btnNew").classList.remove("hidden");
+    $("btnDone").classList.remove("hidden");
+    if (S.mode === "photo") {
+      $("btnPhoto").textContent = "📷 Kuvaa A-hylly";
+      pc.classList.add("hidden");
+      $("photoHint").classList.remove("hidden");
+      $("photoHint").textContent = "Ota kuva A-hyllystä niin, että laatikoiden koodit näkyvät. Isossa hyllyssä kuvaa pala kerrallaan.";
+    }
+    updateSearchBanner();
+  }
+
+  function updateSearchBanner(miss) {
+    stepLbl.textContent = "Vaihe 2 / 2 · Etsitään A-hyllystä";
+    targetCodeEl.textContent = S.target;
+    if (miss) { top.className = "miss"; mainMsg.textContent = miss; return; }
+    if (!S.armed) { top.className = "arming"; mainMsg.textContent = "Käännä kamera A-hyllyyn…"; }
+    else if (S.found) { top.className = "found"; mainMsg.textContent = "✓ VASTINE LÖYTYI"; }
+    else { top.className = ""; mainMsg.textContent = S.mode === "photo" ? "📷 Kuvaa A-hylly" : "🔍 Liikuta kameraa hyllyä pitkin"; }
+  }
+
+  function confirmPick() {
+    if (!S.target) return;
+    log.unshift({ code: S.target, time: new Date().toISOString() });
+    log = log.slice(0, 500); saveLog(); vibrate(40);
+    setPhaseScanB();
+  }
+
+  // ---------- LIVE-TILA ----------
+  async function startLive() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    video.srcObject = stream; await video.play();
+    S.track = stream.getVideoTracks()[0];
+    try {
+      const caps = S.track.getCapabilities ? S.track.getCapabilities() : {};
+      if (caps.focusMode && caps.focusMode.includes("continuous")) await S.track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+      if (caps.torch) $("btnTorch").classList.remove("hidden");
+    } catch (e) {}
+    try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch (e) {}
+  }
+
+  function fitOverlay() {
+    const dpr = window.devicePixelRatio || 1, cw = overlay.clientWidth, ch = overlay.clientHeight;
+    if (overlay.width !== Math.round(cw * dpr) || overlay.height !== Math.round(ch * dpr)) { overlay.width = Math.round(cw * dpr); overlay.height = Math.round(ch * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, cw, ch);
+    const vw = video.videoWidth || cw, vh = video.videoHeight || ch;
+    const scale = Math.max(cw / vw, ch / vh), ox = (cw - vw * scale) / 2, oy = (ch - vh * scale) / 2;
+    return { cw, ch, map: p => ({ x: p.x * scale + ox, y: p.y * scale + oy }) };
+  }
+
+  function poly(c, pts) { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)); c.closePath(); }
+  function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+
+  function drawOther(c, pts, u = 1) {
+    poly(c, pts); c.lineWidth = 2 * u; c.strokeStyle = "rgba(255,255,255,.6)"; c.stroke();
+    c.fillStyle = "rgba(0,0,0,.3)"; c.fill();
+  }
+  function drawMatch(c, pts, label, u = 1, pulse = 1, maxW = 9999) {
+    const m = center(pts);
+    const big = pts.map(p => ({ x: m.x + (p.x - m.x) * 1.6, y: m.y + (p.y - m.y) * 1.6 }));
+    poly(c, big); c.fillStyle = `rgba(34,197,94,${0.2 + 0.15 * pulse})`; c.fill();
+    c.lineWidth = (6 + 3 * pulse) * u; c.strokeStyle = "#22c55e"; c.stroke();
+    c.font = `700 ${18 * u}px system-ui, sans-serif`;
+    const txt = "✓ " + label, tw = c.measureText(txt).width + 20 * u;
+    const minY = Math.min(...big.map(p => p.y));
+    const lx = Math.max(6 * u, Math.min(m.x - tw / 2, maxW - tw - 6 * u)), ly = Math.max(6 * u, minY - 40 * u);
+    c.fillStyle = "#16a34a"; roundRect(c, lx, ly, tw, 32 * u, 8 * u); c.fill();
+    c.fillStyle = "#fff"; c.textBaseline = "middle"; c.fillText(txt, lx + 10 * u, ly + 16 * u);
+  }
+  function drawAim(cw, ch, active) {
+    const s = Math.min(cw, ch) * 0.55, x = (cw - s) / 2, y = (ch - s) / 2, L = s * 0.18;
+    ctx.strokeStyle = active ? "#22c55e" : "rgba(255,255,255,.9)"; ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x, y + L); ctx.lineTo(x, y); ctx.lineTo(x + L, y);
+    ctx.moveTo(x + s - L, y); ctx.lineTo(x + s, y); ctx.lineTo(x + s, y + L);
+    ctx.moveTo(x + s, y + s - L); ctx.lineTo(x + s, y + s); ctx.lineTo(x + s - L, y + s);
+    ctx.moveTo(x + L, y + s); ctx.lineTo(x, y + s); ctx.lineTo(x, y + s - L);
+    ctx.stroke();
+    return { x, y, s };
+  }
+
+  function handleLive(codes) {
+    const { cw, ch, map } = fitOverlay();
+    const now = performance.now();
+    const mapped = codes.map(c => ({ value: c.value, pts: c.pts.map(map) }));
+
+    if (S.phase === "scanB") {
+      const aim = drawAim(cw, ch, false);
+      let best = null, bestD = Infinity;
+      for (const c of mapped) {
+        const m = center(c.pts);
+        const inside = m.x > aim.x && m.x < aim.x + aim.s && m.y > aim.y && m.y < aim.y + aim.s;
+        const d = Math.hypot(m.x - cw / 2, m.y - ch / 2);
+        if (settings.showOthers) drawOther(ctx, c.pts);
+        if ((inside || mapped.length === 1) && d < bestD) { best = c; bestD = d; }
+      }
+      if (best) {
+        if (S.lastScanCandidate === best.value) { drawAim(cw, ch, true); setTarget(best.value, true); }
+        else S.lastScanCandidate = best.value;
+      } else S.lastScanCandidate = null;
+      return;
+    }
+
+    if (S.phase === "searchA") {
+      let match = null;
+      for (const c of mapped) {
+        if (isMatch(c.value, S.target)) match = c;
+        else if (settings.showOthers) drawOther(ctx, c.pts);
+      }
+      if (!S.armed) {
+        if (match) S.targetLastSeen = now;
+        if (now - S.targetLastSeen > 900) { S.armed = true; updateSearchBanner(); }
+        return;
+      }
+      if (match) {
+        S.lastMatch = { pts: match.pts, value: match.value, t: now };
+        if (!S.found) { S.found = true; vibrate([90, 50, 90]); beep(2); updateSearchBanner(); }
+      } else if (S.found && (!S.lastMatch || now - S.lastMatch.t > 700)) { S.found = false; updateSearchBanner(); }
+      if (S.lastMatch && now - S.lastMatch.t < 450) {
+        const pulse = 0.5 + 0.5 * Math.sin(now / 1000 * 8);
+        drawMatch(ctx, S.lastMatch.pts, S.lastMatch.value, 1, pulse, cw);
+      }
+    }
+  }
+
+  async function loop() {
+    if (!S.running) return;
+    const now = performance.now(), minGap = S.engine === "jsqr" ? 160 : 60;
+    if (!S.busy && video.readyState >= 2 && now - S.lastRun >= minGap) {
+      S.busy = true; S.lastRun = now;
+      try { handleLive(await detectFrom(video, video.videoWidth, video.videoHeight, false)); } catch (e) {}
+      S.busy = false;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- KUVATILA ----------
+  function loadImage(file) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error("Kuvaa ei voitu avata."));
+      img.src = url;
+    });
+  }
+
+  async function handlePhoto(file) {
+    $("busy").classList.remove("hidden");
+    try {
+      const img = await loadImage(file);
+      // skaalataan kuva järkevään kokoon (nopeampi ja luotettavampi)
+      const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+      pc.width = Math.round(img.naturalWidth * k); pc.height = Math.round(img.naturalHeight * k);
+      pctx.drawImage(img, 0, 0, pc.width, pc.height);
+      const codes = await detectFrom(pc, pc.width, pc.height, true);
+      const u = Math.max(1, Math.max(pc.width, pc.height) / 700);
+
+      if (S.phase === "scanB") {
+        if (!codes.length) { top.className = "miss"; mainMsg.textContent = "Koodia ei löytynyt – kuvaa lähempää"; vibrate(200); return; }
+        const values = [...new Set(codes.map(c => c.value))];
+        if (values.length === 1) { setTarget(values[0], false); return; }
+        // useita -> käyttäjä valitsee
+        $("pickList").innerHTML = values.map(v => `<button class="pick" data-v="${escapeHtml(v)}">${escapeHtml(v)}</button>`).join("");
+        $("pickModal").classList.remove("hidden");
+        return;
+      }
+
+      // searchA: piirretään tulos kuvaan
+      $("photoHint").classList.add("hidden");
+      pc.classList.remove("hidden");
+      let found = null;
+      for (const c of codes) {
+        if (isMatch(c.value, S.target)) found = c;
+        else if (settings.showOthers) drawOther(pctx, c.pts, u);
+      }
+      if (found) {
+        // himmennetään muu kuva, jotta osuma erottuu
+        pctx.save(); pctx.fillStyle = "rgba(0,0,0,.35)";
+        const m = center(found.pts), r = Math.max(...found.pts.map(p => Math.hypot(p.x - m.x, p.y - m.y))) * 1.9;
+        pctx.beginPath(); pctx.rect(0, 0, pc.width, pc.height); pctx.arc(m.x, m.y, r, 0, Math.PI * 2, true); pctx.fill();
+        pctx.restore();
+        drawMatch(pctx, found.pts, found.value, u, 1, pc.width);
+        S.found = true; vibrate([90, 50, 90]); beep(2); updateSearchBanner();
+      } else {
+        S.found = false;
+        updateSearchBanner(`Ei tässä kuvassa (${codes.length} muuta koodia luettu) – kuvaa seuraava kohta`);
+        vibrate(200);
+      }
+    } catch (e) {
+      top.className = "miss"; mainMsg.textContent = "Virhe: " + (e.message || e);
+    } finally {
+      $("busy").classList.add("hidden");
+      $("fileInput").value = "";
+    }
+  }
+
+  $("btnPhoto").addEventListener("click", () => $("fileInput").click());
+  $("fileInput").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if (f) handlePhoto(f); });
+  $("pickList").addEventListener("click", e => {
+    const b = e.target.closest(".pick"); if (!b) return;
+    $("pickModal").classList.add("hidden"); setTarget(b.dataset.v, false);
+  });
+  $("pickCancel").addEventListener("click", () => $("pickModal").classList.add("hidden"));
+
+  // ---------- Käynnistys ----------
+  function initAudio() { try { const AC = window.AudioContext || window.webkitAudioContext; if (AC) S.audio = new AC(); } catch (e) {} }
+
+  $("startLive").addEventListener("click", async () => {
+    $("err").textContent = ""; initAudio();
+    try {
+      await startLive(); await initDetector();
+      S.mode = "live"; $("stage").classList.remove("hidden"); showUI(); setPhaseScanB();
+      S.running = true; loop();
+    } catch (e) {
+      $("err").textContent = "Live-kamera ei käynnistynyt (" + (e.message || e) + "). Käytä kuvatilaa.";
+    }
+  });
+
+  $("startPhoto").addEventListener("click", async () => {
+    $("err").textContent = ""; initAudio();
+    try {
+      await initDetector();
+      S.mode = "photo";
+      $("photoStage").classList.remove("hidden"); $("btnPhoto").classList.remove("hidden");
+      showUI(); setPhaseScanB();
+    } catch (e) { $("err").textContent = "Virhe: " + (e.message || e); }
+  });
+
+  // ---------- Muut napit ----------
+  $("btnTorch").addEventListener("click", async () => {
+    if (!S.track) return;
+    try { S.torch = !S.torch; await S.track.applyConstraints({ advanced: [{ torch: S.torch }] }); $("btnTorch").classList.toggle("on", S.torch); } catch (e) { S.torch = false; }
+  });
+  $("btnNew").addEventListener("click", setPhaseScanB);
+  $("btnDone").addEventListener("click", confirmPick);
+
+  $("btnManual").addEventListener("click", () => { $("manualInput").value = ""; $("manualModal").classList.remove("hidden"); setTimeout(() => $("manualInput").focus(), 50); });
+  $("manualCancel").addEventListener("click", () => $("manualModal").classList.add("hidden"));
+  function manualOk() { const v = $("manualInput").value.trim(); if (!v) return; $("manualModal").classList.add("hidden"); setTarget(v, false); }
+  $("manualOk").addEventListener("click", manualOk);
+  $("manualInput").addEventListener("keydown", e => { if (e.key === "Enter") manualOk(); });
+
+  function renderLog() {
+    $("logCount").textContent = log.length;
+    $("log").innerHTML = log.slice(0, 100).map(l => {
+      const d = new Date(l.time);
+      return `<li>${escapeHtml(l.code)}<span>${d.toLocaleDateString("fi-FI")} ${d.toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" })}</span></li>`;
+    }).join("") || "<li><span>Ei kuittauksia</span></li>";
+  }
+  $("gear").addEventListener("click", () => {
+    $("setMatch").value = settings.match; $("setSound").checked = settings.sound;
+    $("setVibrate").checked = settings.vibrate; $("setShowOthers").checked = settings.showOthers;
+    renderLog(); $("settingsModal").classList.remove("hidden");
+  });
+  $("setMatch").addEventListener("change", e => { settings.match = e.target.value; saveSettings(); });
+  $("setSound").addEventListener("change", e => { settings.sound = e.target.checked; saveSettings(); });
+  $("setVibrate").addEventListener("change", e => { settings.vibrate = e.target.checked; saveSettings(); });
+  $("setShowOthers").addEventListener("change", e => { settings.showOthers = e.target.checked; saveSettings(); });
+  $("settingsClose").addEventListener("click", () => $("settingsModal").classList.add("hidden"));
+  $("logClear").addEventListener("click", () => { if (confirm("Tyhjennetäänkö loki?")) { log = []; saveLog(); renderLog(); } });
+})();
+</script>
+</body>
+</html>

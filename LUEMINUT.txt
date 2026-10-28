@@ -1,0 +1,15 @@
+VASTINE-ETSIN – Android-sovellus (APK)
+
+APK rakennetaan automaattisesti GitHubissa, omaa ohjelmointiympäristöä ei tarvita.
+
+1. Kirjaudu github.com (ilmainen tunnus) -> New repository -> nimi esim. vastine-etsin -> Create.
+2. "uploading an existing file" -> raahaa KAIKKI tämän kansion sisällöt (myös .github-kansio) -> Commit.
+   (Jos .github-kansio ei siirry raahaamalla: Add file -> Create new file -> nimeksi
+    .github/workflows/build-apk.yml ja liitä tiedoston sisältö.)
+3. Actions-välilehti -> "Rakenna APK" -> odota vihreää merkkiä (n. 3–5 min).
+4. Avaa ajo -> Artifacts -> vastine-etsin-apk -> lataa zip -> sisällä app-debug.apk.
+5. Siirrä APK puhelimeen, avaa ja salli "Asenna tuntemattomista lähteistä".
+6. Käynnistä Vastine-etsin -> salli kamera -> Live-kamera.
+
+Sovelluksen sisältö on app/src/main/assets/index.html – muutokset tehdään siihen,
+ja GitHub rakentaa uuden APK:n automaattisesti jokaisen muutoksen jälkeen.
